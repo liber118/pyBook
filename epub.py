@@ -192,7 +192,7 @@ def prep_ncx (tree):
     xml.append('<navMap>')
 
     for page in tree.xpath("/book/front/page"):
-        uri = URI("misc", 1, page.get("id"), page.text.strip(), guide=page.get("guide"))
+        uri = URI("misc", 0, page.get("id"), page.text.strip(), guide=page.get("guide"))
         uri.gen_nav_point(xml, play_order)
         uri_list.append(uri)
         play_order += 1
@@ -217,7 +217,7 @@ def prep_ncx (tree):
         xml.append('</navPoint>')
 
     for page in tree.xpath("/book/back/page"):
-        uri = URI("misc", 1, page.get("id"), page.text.strip(), guide=page.get("guide"))
+        uri = URI("misc", 0, page.get("id"), page.text.strip(), guide=page.get("guide"))
         uri.gen_nav_point(xml, play_order)
         uri_list.append(uri)
         play_order += 1
@@ -348,6 +348,8 @@ if __name__ == "__main__":
 
     # special case for TOC XHTML
 
+    last_level = None
+
     with open(epub_path + toc_xhtml, "w") as f:
         f.write('<?xml version="1.0" encoding="UTF-8"?>\n')
         f.write('<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">\n')
@@ -360,11 +362,19 @@ if __name__ == "__main__":
         f.write('<h2 class="misc_title">Table of Contents</h2>')
 
         for uri in uri_list[1:]:
-            if uri.level == 1:
-                f.write('<p class="left_hang toc">')
-            else:
-                f.write('<p class="toc">')
+            if uri.level != last_level:
+                if last_level == 2:
+                    f.write('</ul>')
 
-            f.write('<a class="toc" href="%s">%s</a></p>' % (uri.uri, uri.get_label()))
+                last_level = uri.level
+
+            html = '<a href="%s">%s</a>' % (uri.uri, uri.get_label())
+
+            if uri.level == 0:
+                f.write('<p class="toc"><em>%s</em></p>' % html)
+            elif uri.level == 2:
+                f.write('<li><p class="toc">%s</p></li>' % html)
+            else:
+                f.write('<p class="toc"><strong>%s</strong></p><ul>' % html)
 
         f.write('</div></body></html>')
