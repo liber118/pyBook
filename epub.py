@@ -20,6 +20,7 @@ title = None
 author = None
 
 uri_list = []
+first_page = None
 toc_xhtml = "toc.xhtml"
 
 mimetype = {
@@ -60,12 +61,13 @@ class URI:
     representation for an XHTML page
     """
 
-    def __init__ (self, kind, id, label, img=None, guide=None):
+    def __init__ (self, kind, level, id, label, img=None, guide=None):
         """
         initialize
         """
 
         self.kind = kind
+        self.level = level
         self.id = id
         self.label = label
         self.img = img
@@ -111,6 +113,14 @@ class URI:
         xml.append('<itemref idref="%s" linear="%s"/>' % (self.idref, yes_no))
 
 
+    def get_label (self):
+        """
+        convert UTF-8 characters in label to HTML entities
+        """
+
+        return cgi.escape(self.label).encode("ascii", "xmlcharrefreplace")
+
+
     def format_content(self, epub_path, src_path):
         """
         copy/format an XHTML file
@@ -132,12 +142,10 @@ class URI:
                 xhtml = etree.tostring(content, method="xml", pretty_print=False)[5:-6]
 
             with open(epub_path + self.uri, "w") as f:
-                label = cgi.escape(self.label).encode("ascii", "xmlcharrefreplace")
-
                 f.write('<?xml version="1.0" encoding="UTF-8"?>\n')
                 f.write('<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">\n')
                 f.write('<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en"><head>')
-                f.write('<title>%s | %s</title>' % (label, title))
+                f.write('<title>%s | %s</title>' % (self.get_label(), title))
                 f.write('<link rel="stylesheet" href="epub.css" type="text/css"/>')
                 f.write('<meta http-equiv="Content-Type" content="application/xhtml+xml; charset=utf-8"/>')
                 f.write('<meta name="EPB-UUID" content="%s"/>' % uuid)
@@ -159,7 +167,7 @@ def prep_ncx (tree):
     http://www.niso.org/workrooms/daisy/Z39-86-2005.html#NCXElem
     """
 
-    global uri_list, ns, uuid, title, author
+    global uri_list, ns, uuid, title, author, first_page, toc_xhtml
 
     xml = []
     xml.append('<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">')
@@ -184,20 +192,23 @@ def prep_ncx (tree):
     xml.append('<navMap>')
 
     for page in tree.xpath("/book/front/page"):
-        uri = URI("misc", page.get("id"), page.text.strip(), guide=page.get("guide"))
+        uri = URI("misc", 1, page.get("id"), page.text.strip(), guide=page.get("guide"))
         uri.gen_nav_point(xml, play_order)
         uri_list.append(uri)
         play_order += 1
         xml.append('</navPoint>')
 
     for part in tree.xpath("/book/part"):
-        uri = URI("part", part.get("id"), part.text.strip())
+        uri = URI("part", 1, part.get("id"), part.text.strip())
         uri.gen_nav_point(xml, play_order)
         uri_list.append(uri)
         play_order += 1
 
+        if not first_page:
+            first_page = uri
+
         for chapter in part.iter("chapter"):
-            uri = URI("chapter", chapter.get("id"), chapter.text.strip(), img=chapter.get("img"))
+            uri = URI("chapter", 2, chapter.get("id"), chapter.text.strip(), img=chapter.get("img"))
             uri.gen_nav_point(xml, play_order)
             uri_list.append(uri)
             play_order += 1
@@ -206,7 +217,7 @@ def prep_ncx (tree):
         xml.append('</navPoint>')
 
     for page in tree.xpath("/book/back/page"):
-        uri = URI("misc", page.get("id"), page.text.strip(), guide=page.get("guide"))
+        uri = URI("misc", 1, page.get("id"), page.text.strip(), guide=page.get("guide"))
         uri.gen_nav_point(xml, play_order)
         uri_list.append(uri)
         play_order += 1
@@ -235,7 +246,7 @@ def prep_opf (tree):
     xml.append('<manifest>')
     xml.append('<item id="stylesheet" href="epub.css" media-type="text/css"/>')
     xml.append('<item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>')
-    xml.append('<item id="toc" href="%s" media-type="application/x-dtbncx+xml"/>' % toc_xhtml)
+    xml.append('<item id="toc" href="%s" media-type="application/xhtml+xml"/>' % toc_xhtml)
 
     for uri in uri_list:
         uri.gen_opf_item(xml)
@@ -248,6 +259,7 @@ def prep_opf (tree):
 
     xml.append('</manifest>')
     xml.append('<spine toc="ncx">')
+    xml.append('<itemref idref="toc" linear="no"/>')
 
     linear = False
 
@@ -257,11 +269,12 @@ def prep_opf (tree):
 
     xml.append('</spine>')
     xml.append('<guide>')
-    xml.append('<reference title="Table of Contents" type="toc" href="%s"/>' % toc_xhtml)
+    xml.append('<reference type="text" title="%s" href="%s"/>' % (first_page.label, first_page.uri))
+    xml.append('<reference type="toc" title="Table of Contents" href="%s"/>' % toc_xhtml)
 
     for uri in uri_list:
         if uri.guide:
-            xml.append('<reference title="%s" type="%s" href="%s"/>' % (uri.idref, uri.guide, uri.uri))
+            xml.append('<reference type="%s" title="%s" href="%s"/>' % (uri.guide, uri.label, uri.uri))
 
     xml.append('</guide>')
     xml.append('</package>')
@@ -271,10 +284,6 @@ def prep_opf (tree):
 
 if __name__ == "__main__":
     # generate an EPUB
-    # http://www.thebookdesigner.com/2009/09/parts-of-a-book/
-    # http://www.hxa.name/articles/content/epub-guide_hxa7241_2007.html
-    # http://www.ibm.com/developerworks/xml/tutorials/x-epubtut/index.html
-    # http://kindlegen.s3.amazonaws.com/AmazonKindlePublishingGuidelines.pdf
 
     file_book = sys.argv[1]
     epub_path = sys.argv[2]
@@ -348,5 +357,14 @@ if __name__ == "__main__":
         f.write('<meta http-equiv="Content-Type" content="application/xhtml+xml; charset=utf-8"/>')
         f.write('<meta name="EPB-UUID" content="%s"/>' % uuid)
         f.write('</head><body><div class="body" style="white-space:pre-wrap">')
-        #f.write(xhtml)
+        f.write('<h2 class="misc_title">Table of Contents</h2>')
+
+        for uri in uri_list[1:]:
+            if uri.level == 1:
+                f.write('<p class="left_hang toc">')
+            else:
+                f.write('<p class="toc">')
+
+            f.write('<a class="toc" href="%s">%s</a></p>' % (uri.uri, uri.get_label()))
+
         f.write('</div></body></html>')
