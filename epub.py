@@ -269,7 +269,7 @@ def prep_opf (tree):
 
     xml.append('</spine>')
     xml.append('<guide>')
-    xml.append('<reference type="text" title="%s" href="%s"/>' % (first_page.label, first_page.uri))
+    xml.append('<reference type="text" title="Beginning" href="%s"/>' % first_page.uri)
     xml.append('<reference type="toc" title="Table of Contents" href="%s"/>' % toc_xhtml)
 
     for uri in uri_list:
@@ -360,21 +360,26 @@ if __name__ == "__main__":
         f.write('<meta name="EPB-UUID" content="%s"/>' % uuid)
         f.write('</head><body><div class="body" style="white-space:pre-wrap">')
         f.write('<h2 class="misc_title">Table of Contents</h2>')
+        f.write('<p>&#xA0;</p>')
+        f.write('<p class="left_hang toc">')
+
+        f.write('<img src="img/voronoi.png" alt="voronoi tessellations" style="width:9em;height:69%;float:right;margin-bottom:2.5641%;margin-left:2.5641%;margin-right:0.0000%;margin-top:2.5641%;"/>')
 
         for uri in uri_list[1:]:
             if uri.level != last_level:
                 if last_level == 2:
-                    f.write('</ul>')
+                    f.write('<br/>')
 
                 last_level = uri.level
 
-            html = '<a href="%s">%s</a>' % (uri.uri, uri.get_label())
+            html = '<a href="%s">%s</a><br/>' % (uri.uri, uri.get_label())
 
             if uri.level == 0:
-                f.write('<p class="toc"><em>%s</em></p>' % html)
+                f.write('<em>%s</em><br/>' % html)
             elif uri.level == 2:
-                f.write('<li><p class="toc">%s</p></li>' % html)
+                f.write('&#xA0;&#xA0;&#xA0;<strong>:</strong>&#xA0;%s' % html)
             else:
-                f.write('<p class="toc"><strong>%s</strong></p><ul>' % html)
+                f.write('<strong>%s</strong>' % html)
 
+        f.write('</p>')
         f.write('</div></body></html>')
